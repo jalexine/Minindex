@@ -133,7 +133,7 @@ class FmIndex:
 
         return l <= r
 
-'''
+
 def main():
     sequence = "banana$"
     fm_index = FmIndex(sequence)
@@ -151,7 +151,54 @@ def main():
     print("Contains 'nana':", fm_index.contains('nana'))
     print("Contains 'xyz':", fm_index.contains('xyz'))
 
+    # Tests supplémentaires
+    print("Contains 'ban':", fm_index.contains('ban'))     # True, 'ban' est le début de "banana$"
+    print("Contains 'na':", fm_index.contains('na'))       # True, 'na' apparaît plusieurs fois, ex: "ba(n a)na$"
+    print("Contains 'aa':", fm_index.contains('aa'))       # False, il n'y a jamais deux 'a' consécutifs
+    print("Contains '$':", fm_index.contains('$'))         # True, '$' est le symbole de fin dans "banana$"
+    print("Contains 'na$':", fm_index.contains('na$'))     # True, 'na$' se trouve à la fin: "bana(n a $)"
+    print("Contains 'banan':", fm_index.contains('banan')) # True, 'banan' est le début de la séquence "banana"
+    print("Contains 'anana':", fm_index.contains('anana')) # True, 'anana' est présente: "b(anana)$"
+    print("Contains 'bana$':", fm_index.contains('bana$')) # False, il n'y a pas de sous-chaîne 'bana$' en continu
+
+        # Tests pour les autres méthodes de la classe
+
+    # Test de la fonction lf (LF-mapping)
+    # Avec la séquence "banana$", la BWT devrait ressembler à quelque chose comme "annb$aa" (selon le tri).
+    # Comptage des caractères dans la BWT : a:3, n:2, b:1, $:1
+    # lf(alpha, k) = n[alpha] + k - 1
+    print("LF('a', 1):", fm_index.lf('a', 1))  # Résultat attendu: 3 (puisque n['a']=3, 3+1-1=3)
+    print("LF('a', 2):", fm_index.lf('a', 2))  # Résultat attendu: 4 (3+2-1=4)
+    print("LF('n', 1):", fm_index.lf('n', 1))  # Résultat attendu: 2 (n['n']=2, 2+1-1=2)
+    print("LF('n', 2):", fm_index.lf('n', 2))  # Résultat attendu: 3 (2+2-1=3)
+    print("LF('$', 1):", fm_index.lf('$', 1))  # Résultat attendu: 0 (n['$']=1, 1+1-1=1 mais comme c'est 0-based, à vérifier)
+    # Note : Ici, il faudra vérifier ce résultat. Selon la logique du code, lf('$',1)=1+1-1=1. Si on s'attend à un index 0-based
+    # il peut y avoir confusion. On laisse le résultat brut du code tel quel.
+
+    # Test de find_next et find_prev
+    # BWT: 'annb$aa' (index: a(0), n(1), n(2), b(3), $(4), a(5), a(6))
+    print("find_next('a', 0):", fm_index.find_next('a', 0))  # Cherche 'a' à partir de l'indice 0, trouvé à 0
+    # Résultat attendu: 0
+    print("find_next('b', 0):", fm_index.find_next('b', 0))  # Cherche 'b' depuis 0, b est à l'indice 3
+    # Résultat attendu: 3
+    print("find_next('$', 2):", fm_index.find_next('$', 2))   # Cherche '$' à partir de 2, trouvé à 4
+    # Résultat attendu: 4
+
+    print("find_prev('a', 6):", fm_index.find_prev('a', 6))  # Cherche 'a' avant ou à 6, trouvé à 6
+    # Résultat attendu: 6
+    print("find_prev('b', 6):", fm_index.find_prev('b', 6))  # Cherche 'b' avant ou à 6 (donc 6,5,4,3...), trouvé à 3
+    # Résultat attendu: 3
+    print("find_prev('$', 2):", fm_index.find_prev('$', 2))   # Cherche '$' avant ou à 2, indices 2('n'),1('n'),0('a'), pas de '$'
+    # Résultat attendu: -1 (non trouvé)
+
+    # Test de la sérialisation et désérialisation
+    fm_index.save("banana_fm_index.dump")
+    loaded_fm = load_fm_index("banana_fm_index.dump")
+    print("Loaded FM-index BWT:", loaded_fm.bwt)
+    # Résultat attendu: la même BWT que fm_index.bwt, soit "annb$aa"
+
+
 
 if __name__ == "__main__":
     main()
-'''
+
