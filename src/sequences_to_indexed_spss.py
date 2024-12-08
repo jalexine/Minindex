@@ -1,11 +1,11 @@
 import os
+import sys
 import pickle
 import argparse
 from collections import Counter
 from time import time
 from fmi import FmIndex
 
-# Pre-computed dictionary of complements
 COMPLEMENTS = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
 
 class Timer:
@@ -21,7 +21,10 @@ class Timer:
         self.elapsed = self.end - self.start
 
     def print(self, message):
-        print(message.format(self.elapsed))
+        if hasattr(self, 'elapsed'):
+            print(message.format(self.elapsed))
+        else:
+            print("Timer error: 'elapsed' attribute not set.")
 
 def reverse_complement(kmer):
     """Computes the reverse complement of a given k-mer."""
@@ -56,15 +59,6 @@ def kmer_abundance(fasta_file, k):
             process_sequence(sequence, counts, k)
     return counts
 
-def neighbors(kmer, dbg_set, is_right):
-    """
-    Generates neighbors to the left or right of a k-mer.
-    Explores all possible paths to maximize SPSS fragments.
-    """
-    base_kmer = kmer[1:] if is_right else kmer[:-1]
-    return [base_kmer + c if is_right else c + base_kmer
-            for c in "ACGT" if (base_kmer + c if is_right else c + base_kmer) in dbg_set]
-
 def create_spss(dbg):
     """
     Builds SPSS by maximizing the diversity of explored paths.
@@ -79,10 +73,11 @@ def create_spss(dbg):
 
         # Right extension
         while True:
-            neigh = neighbors(current, dbg_set, True)
-            if neigh:
-                # Explore all neighbors to maximize diversity
-                next_kmer = max(neigh, key=lambda n: dbg.get(n, 0))  # Choose the most frequent neighbor
+            neighbors = [
+                current[1:] + c for c in "ACGT" if current[1:] + c in dbg_set
+            ]
+            if neighbors:
+                next_kmer = max(neighbors, key=lambda n: dbg.get(n, 0))  # Most frequent neighbor
                 right_part.append(next_kmer[-1])
                 dbg_set.remove(next_kmer)
                 current = next_kmer
@@ -92,10 +87,11 @@ def create_spss(dbg):
         current = kmer
         # Left extension
         while True:
-            neigh = neighbors(current, dbg_set, False)
-            if neigh:
-                # Explore all neighbors to maximize diversity
-                prev_kmer = max(neigh, key=lambda n: dbg.get(n, 0))  # Choose the most frequent neighbor
+            neighbors = [
+                c + current[:-1] for c in "ACGT" if c + current[:-1] in dbg_set
+            ]
+            if neighbors:
+                prev_kmer = max(neighbors, key=lambda n: dbg.get(n, 0))  # Most frequent neighbor
                 left_part.append(prev_kmer[0])
                 dbg_set.remove(prev_kmer)
                 current = prev_kmer
@@ -108,49 +104,117 @@ def create_spss(dbg):
 
     return '%'.join(spss_fragments) + '$'
 
-def save_spss(spss_str, output_path):
+def save_spss(spss_str, output_path, k, threshold, dataset_name):
     """
-    Saves the SPSS string to a file using pickle.
+    Saves the SPSS string to a file using pickle with an explicit name.
     """
-    filepath = os.path.join(output_path, "SPSS_seq.pkl") if os.path.isdir(output_path) else output_path
+    filename = f"SPSS_k{k}_t{threshold}_{dataset_name}.pkl"
+    filepath = os.path.join(output_path, filename)
     with open(filepath, "wb") as f:
         pickle.dump(spss_str, f)
+    print(f"SPSS saved to {filepath}")
+
+def save_fm_index(fm_index, output_path, k, threshold, dataset_name):
+    """
+    Saves the FM-index to a file with a clear and explicit name.
+    """
+    filename = f"FMIndex_k{k}_t{threshold}_{dataset_name}.pkl"
+    filepath = os.path.join(output_path, filename)
+    with open(filepath, "wb") as f:
+        pickle.dump(fm_index, f)
+    print(f"FM-index saved to {filename}")
+
+def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, time_spss, spss_size, num_spss, time_fmi):
+    """
+    Saves the statistics to a text file and prints them to the terminal.
+    """
+    filename = os.path.join(output_path, f"results_{os.path.basename(fasta_file)}.txt")
+    content = (
+        f"----------------------------------------\n"
+        f"Processing: -i {fasta_file} -k {k} -t {t}\n"
+        f"OUT TIME_SELECTING_KMERS={time_selecting:.2f} seconds\n"
+        f"OUT TIME_SPSS_CONSTRUCTION={time_spss:.2f} seconds\n"
+        f"OUT |SPSS(K)|={spss_size}\n"
+        f"OUT #SPSS(K)={num_spss}\n"
+        f"OUT TIME BUILD FMI={time_fmi:.2f} seconds\n"
+        f"----------------------------------------\n"
+    )
+    
+    # Print to terminal
+    print(content)
+    
+    # Save to file
+    with open(filename, "a") as f:
+        f.write(content)
+
+def test_fm_index(fm_index, spss):
+    """
+    Tests the FM-index by comparing with the raw SPSS string.
+    """
+    test_kmers = ["ACTG", "GGTA", "CCGT"]  # Example kmers for testing
+    for kmer in test_kmers:
+        in_fmi = fm_index.contains(kmer)
+        in_raw = kmer in spss
+        assert in_fmi == in_raw, f"FM-index inconsistency for {kmer}"
+    print("FM-index validation passed.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate SPSS from sequencing data.")
+    parser = argparse.ArgumentParser(
+        description="Generate SPSS from sequencing data and build FM-index.",
+        add_help=False
+    )
     parser.add_argument("-i", "--sequence", required=True, help="Sequence file (FASTA)")
-    parser.add_argument("-t", "--threshold", type=int, required=False, default=1,
-                        help="Minimum abundance threshold (not used in this version)")
     parser.add_argument("-k", "--kmer", type=int, required=True, help="K-mer size")
-    parser.add_argument("-o", "--output", required=True, help="Output file or directory")
+    parser.add_argument("-t", "--threshold", type=int, required=False, default=1,
+                        help="Minimum abundance threshold for solid k-mers")
+    parser.add_argument("-o", "--output", required=True, help="Output directory for results")
+
+    # Custom help message
+    if len(sys.argv) == 1:
+        print("Usage: sequences_to_indexed_spss.py -i SEQUENCE -k KMER -o OUTPUT [-t THRESHOLD]")
+        sys.exit(1)
+
     args = parser.parse_args()
 
-    # Count k-mers
+    # Validate input file exists
+    if not os.path.isfile(args.sequence):
+        print(f"Error: Input sequence file '{args.sequence}' not found.")
+        sys.exit(1)
+
+    # Validate output directory
+    if not os.path.exists(args.output):
+        print(f"Warning: Output directory '{args.output}' does not exist. Creating it.")
+        os.makedirs(args.output)
+
+    # Core processing
     with Timer() as timer_select:
         dbg = kmer_abundance(args.sequence, args.kmer)
-        print(f"Total number of k-mers: {len(dbg)}")
-    timer_select.print("OUT TIME_SELECTING_KMERS={} seconds")
+        dbg = {kmer: count for kmer, count in dbg.items() if count >= args.threshold}
 
-    # Build SPSS
     with Timer() as timer_spss:
         spss = create_spss(dbg)
-        print(f"Size of SPSS string: {len(spss)} characters")
-    timer_spss.print("OUT TIME_SPSS_CONSTRUCTION={} seconds")
 
-    # Save SPSS
-    save_spss(spss, args.output)
+    dataset_name = os.path.basename(args.sequence).split('.')[0]
+    save_spss(spss, args.output, args.kmer, args.threshold, dataset_name)
 
-    # Statistics
-    total_characters = len(spss)
-    distinct_sequences = spss.count('%')
-    print(f"OUT |SPSS(K)|={total_characters}")
-    print(f"OUT #SPSS(K)={distinct_sequences}")
-
-    # Build FM-Index
     with Timer() as timer_build_fmi:
         fm_index = FmIndex(spss)
-        fm_index.save(args.output)
-    timer_build_fmi.print("OUT TIME BUILD FMI={} seconds")
+    save_fm_index(fm_index, args.output, args.kmer, args.threshold, dataset_name)
+
+    # Validate FM-index
+    test_fm_index(fm_index, spss)
+
+    save_statistics_and_print(
+        args.output,
+        args.sequence,
+        args.kmer,
+        args.threshold,
+        timer_select.elapsed,
+        timer_spss.elapsed,
+        len(spss),
+        spss.count('%'),
+        timer_build_fmi.elapsed,
+    )
 
 if __name__ == "__main__":
     main()
