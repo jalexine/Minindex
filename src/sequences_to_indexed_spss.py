@@ -2,11 +2,26 @@ import os
 import pickle
 import argparse
 from collections import Counter
-from timer import Timer
+from time import time
 from fmi import FmIndex
 
 # Pre-computed dictionary of complements
 COMPLEMENTS = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+
+class Timer:
+    """
+    Timer class to measure elapsed time in seconds.
+    """
+    def __enter__(self):
+        self.start = time()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time()
+        self.elapsed = self.end - self.start
+
+    def print(self, message):
+        print(message.format(self.elapsed))
 
 def reverse_complement(kmer):
     """Computes the reverse complement of a given k-mer."""
@@ -105,7 +120,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate SPSS from sequencing data.")
     parser.add_argument("-i", "--sequence", required=True, help="Sequence file (FASTA)")
     parser.add_argument("-t", "--threshold", type=int, required=False, default=1,
-                        help="Minimum abundance threshold (not used in this optimized version)")
+                        help="Minimum abundance threshold (not used in this version)")
     parser.add_argument("-k", "--kmer", type=int, required=True, help="K-mer size")
     parser.add_argument("-o", "--output", required=True, help="Output file or directory")
     args = parser.parse_args()
