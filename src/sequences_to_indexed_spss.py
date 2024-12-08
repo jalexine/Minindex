@@ -108,7 +108,7 @@ def save_spss(spss_str, output_path, k, threshold, dataset_name):
     """
     Saves the SPSS string to a file using pickle with an explicit name.
     """
-    filename = f"SPSS_k{k}_t{threshold}_{dataset_name}.pkl"
+    filename = f"spss_{dataset_name}_k{k}_t{threshold}.pkl"
     filepath = os.path.join(output_path, filename)
     with open(filepath, "wb") as f:
         pickle.dump(spss_str, f)
@@ -118,7 +118,7 @@ def save_fm_index(fm_index, output_path, k, threshold, dataset_name):
     """
     Saves the FM-index to a file with a clear and explicit name.
     """
-    filename = f"FMIndex_k{k}_t{threshold}_{dataset_name}.pkl"
+    filename = f"fmi_{dataset_name}_k{k}_t{threshold}.dump"
     filepath = os.path.join(output_path, filename)
     with open(filepath, "wb") as f:
         pickle.dump(fm_index, f)
@@ -128,7 +128,7 @@ def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, tim
     """
     Saves the statistics to a text file and prints them to the terminal.
     """
-    filename = os.path.join(output_path, f"results_{os.path.basename(fasta_file)}.txt")
+    filename = os.path.join(output_path, f"stats_{os.path.basename(fasta_file)}.txt")
     content = (
         f"----------------------------------------\n"
         f"Processing: -i {fasta_file} -k {k} -t {t}\n"
@@ -165,9 +165,9 @@ def main():
     )
     parser.add_argument("-i", "--sequence", required=True, help="Sequence file (FASTA)")
     parser.add_argument("-k", "--kmer", type=int, required=True, help="K-mer size")
-    parser.add_argument("-t", "--threshold", type=int, required=False, default=1,
-                        help="Minimum abundance threshold for solid k-mers")
-    parser.add_argument("-o", "--output", required=True, help="Output directory for results")
+    parser.add_argument("-t", "--threshold", type=int, required=True, help="Threshold size") 
+    parser.add_argument("-o", "--output", required=False, default="./output", 
+                    help="Output directory for results (default: './output')")
 
     # Custom help message
     if len(sys.argv) == 1:
