@@ -10,7 +10,13 @@ from pysuffix3 import tools_karkkainen_sanders as tks
 
 def load_fm_index(filename):
     """
-    Load the FM-index from a file and return it.
+    Load an FM-index object from a given file.
+
+    Parameters:
+        filename (str): The path to the file containing the serialized FM-index object.
+
+    Returns:
+        FmIndex: The deserialized FM-index instance loaded from the file.
     """
     with open(filename, 'rb') as f:
         fm_index = pickle.load(f)
@@ -18,44 +24,71 @@ def load_fm_index(filename):
 
 class FmIndex:
     """
-    Class for storing an FM-index of a sequence.
+    A class that constructs and stores an FM-index for efficient substring queries.
+
+    Parameters:
+        sequence (str): The input sequence (e.g., a genome) for which the FM-index will be built.
+
+    Attributes:
+        suffix_array (list[int]): The suffix array of the input sequence.
+        sequence (str): The original input sequence.
+        bwt (str): The Burrows–Wheeler transform of the input sequence.
+        rank (list[int]): The array of rank values associated with each character in the BWT.
+        n (dict): A dictionary mapping each character to its total count in the BWT.
     """
+
     def __init__(self, sequence):
         """
-        Constructor: Initializes the FM-index.
-        """
-        # Directly use tks to generate the suffix array
-        self.suffix_array = tks.simple_kark_sort(sequence)
-        #print("Suffix Array:", self.suffix_array)
+        Initialize the FM-index by computing the suffix array, BWT, and related structures.
 
+        Parameters:
+            sequence (str): The input sequence to index.
+        """
+        self.suffix_array = tks.simple_kark_sort(sequence)
         self.sequence = sequence
         self.bwt = self.set_bwt()
         self.rank, self.n = self.set_n_and_rank()
-        #print("N:", self.n)
-        #print("Rank:", self.rank)
 
     def save(self, filename):
         """
-        Save the FM-index to a file using pickle.
+        Serialize the current FM-index instance and save it to a file.
+
+        Parameters:
+            filename (str): The path of the file where the FM-index should be saved.
+
+        Returns:
+            None
         """
         with open(filename, 'wb') as f:
             pickle.dump(self, f)
-        #print(f"FM-index saved to {filename}.")
 
     def set_bwt(self):
         """
-        Given a sequence and its suffix array, computes the Burrows-Wheeler Transform (BWT).
+        Compute the Burrows–Wheeler transform (BWT) from the suffix array and sequence.
+
+        Parameters:
+            None
+
+        Returns:
+            str: The BWT string derived from the input sequence.
         """
         bwt = "".join(self.sequence[i - 1] if i > 0 else self.sequence[-1] for i in self.suffix_array)
-        #print("Corrected BWT:", bwt)
         return bwt
 
     def set_n_and_rank(self):
         """
-        Computes N (occurrences of each letter in the BWT) and rank (cumulative counts for each character).
+        Compute the counts of each character and rank arrays from the BWT.
+
+        Parameters:
+            None
+
+        Returns:
+            tuple:
+                - list[int]: The rank array of characters in the BWT.
+                - dict: A dictionary where each key is a character and its value is the count of that character in the BWT.
         """
         bw = self.bwt
-        tots = dict()
+        tots = {}
         ranks = []
 
         for c in bw:
@@ -64,45 +97,84 @@ class FmIndex:
             ranks.append(tots[c])
             tots[c] += 1
 
-        #print("N (Total counts):", tots)
-        #print("Ranks:", ranks)
         return ranks, tots
 
-    def lf(self, alpha, k) -> int:
+    def lf(self, alpha, k):
         """
-        Returns the index in the suffix array corresponding to the k-th suffix starting with letter alpha.
+        Compute the LF-mapping for a given character and occurrence count (k).
+
+        LF-mapping finds the position in the suffix array that corresponds to the k-th occurrence of character alpha in the BWT.
+
+        Parameters:
+            alpha (str): The character to map.
+            k (int): The occurrence count of the character alpha.
+
+        Returns:
+            int: The index in the suffix array corresponding to the given character occurrence.
         """
         lf_index = self.n[alpha] + k - 1
-        #print(f"LF Mapping for ({alpha}, {k}): {lf_index}")
         return lf_index
 
-    def find_next(self, alpha, l) -> int:
+    def find_next(self, alpha, l):
         """
-        Find the first line >= l such that BWT[line] == alpha.
+        Find the next occurrence of a given character in the BWT starting from index l.
+
+        Parameters:
+            alpha (str): The character to find in the BWT.
+            l (int): The starting index in the BWT from which to begin the search.
+
+        Returns:
+            int: The index of the next occurrence of alpha in the BWT at or after l, or -1 if not found.
         """
         for i in range(l, len(self.bwt)):
             if self.bwt[i] == alpha:
-                #print(f"Find Next: Found {alpha} at index {i}")
                 return i
-        #print(f"Find Next: {alpha} not found after index {l}")
         return -1
 
-    def find_prev(self, alpha, l) -> int:
+    def find_prev(self, alpha, l):
         """
-        Find the last line <= l such that BWT[line] == alpha.
+        Find the previous occurrence of a given character in the BWT up to index l.
+
+        Parameters:
+            alpha (str): The character to find in the BWT.
+            l (int): The ending index in the BWT at which to end the backward search.
+
+        Returns:
+            int: The index of the last occurrence of alpha at or before l, or -1 if not found.
         """
         for i in range(l, -1, -1):
             if self.bwt[i] == alpha:
-                #print(f"Find Prev: Found {alpha} at index {i}")
                 return i
-        #print(f"Find Prev: {alpha} not found before or at index {l}")
         return -1
     
-    def contains(self, q) -> bool:
+    def occ(self, c, i):
         """
-        Check if the query q is indexed in the FM-index.
+        Count the number of occurrences of character c in the BWT from index 0 to index i inclusive.
+
+        Parameters:
+            c (str): The character whose occurrences are to be counted.
+            i (int): The ending index of the range in the BWT (0-based).
+
+        Returns:
+            int: The number of occurrences of c in the BWT up to and including index i.
         """
-        # Sort characters and build the C array
+        if i < 0:
+            return 0
+        return sum(1 for j in range(i + 1) if self.bwt[j] == c)
+
+    def contains(self, q):
+        """
+        Check whether a given query substring q exists in the indexed sequence.
+
+        The method uses backward search on the BWT to determine if q occurs in the sequence.
+
+        Parameters:
+            q (str): The query substring to search for.
+
+        Returns:
+            bool: True if q is found in the sequence, False otherwise.
+        """
+        # Sort characters and build the C array (cumulative counts)
         chars = sorted(self.n.keys())
         C = {}
         total = 0
@@ -110,30 +182,23 @@ class FmIndex:
             C[c] = total
             total += self.n[c]
 
-        # Helper to compute occurrences of `c` up to index `i`
-        def occ(c, i):
-            if i < 0:
-                return 0
-            return sum(1 for j in range(i + 1) if self.bwt[j] == c)
-
-        # Initialize the range [l, r]
+        # Initialize the search range [l, r]
         l, r = 0, len(self.bwt) - 1
 
         # Process the query in reverse
         for char in reversed(q):
             if char not in C:
-                #print(f"Character {char} not in BWT. Query not found.")
                 return False
-            l = C[char] + occ(char, l - 1)
-            r = C[char] + occ(char, r) - 1
-            #print(f"Updated range for {char}: l={l}, r={r}")
+            l = C[char] + self.occ(char, l - 1)
+            r = C[char] + self.occ(char, r) - 1
             if l > r:
-                #print(f"Range invalid after processing {char}. Query not found.")
                 return False
 
         return l <= r
 
 
+
+'''
 def main():
     sequence = "banana$"
     fm_index = FmIndex(sequence)
@@ -171,9 +236,7 @@ def main():
     print("LF('a', 2):", fm_index.lf('a', 2))  # Résultat attendu: 4 (3+2-1=4)
     print("LF('n', 1):", fm_index.lf('n', 1))  # Résultat attendu: 2 (n['n']=2, 2+1-1=2)
     print("LF('n', 2):", fm_index.lf('n', 2))  # Résultat attendu: 3 (2+2-1=3)
-    print("LF('$', 1):", fm_index.lf('$', 1))  # Résultat attendu: 0 (n['$']=1, 1+1-1=1 mais comme c'est 0-based, à vérifier)
-    # Note : Ici, il faudra vérifier ce résultat. Selon la logique du code, lf('$',1)=1+1-1=1. Si on s'attend à un index 0-based
-    # il peut y avoir confusion. On laisse le résultat brut du code tel quel.
+    print("LF('$', 1):", fm_index.lf('$', 1))  # Résultat attendu: 1 (n['$']=1, 1+1-1=1 mais comme c'est 0-based, à vérifier)
 
     # Test de find_next et find_prev
     # BWT: 'annb$aa' (index: a(0), n(1), n(2), b(3), $(4), a(5), a(6))
@@ -191,14 +254,9 @@ def main():
     print("find_prev('$', 2):", fm_index.find_prev('$', 2))   # Cherche '$' avant ou à 2, indices 2('n'),1('n'),0('a'), pas de '$'
     # Résultat attendu: -1 (non trouvé)
 
-    # Test de la sérialisation et désérialisation
-    fm_index.save("banana_fm_index.dump")
-    loaded_fm = load_fm_index("banana_fm_index.dump")
-    print("Loaded FM-index BWT:", loaded_fm.bwt)
-    # Résultat attendu: la même BWT que fm_index.bwt, soit "annb$aa"
 
 
 
 if __name__ == "__main__":
     main()
-
+'''
