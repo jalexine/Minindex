@@ -171,7 +171,7 @@ def main():
 
     # Custom help message
     if len(sys.argv) == 1:
-        print("Usage: sequences_to_indexed_spss.py -i SEQUENCE -k KMER -o OUTPUT [-t THRESHOLD]")
+        print("\033[95m♡ pls use : sequences_to_indexed_spss.py -i SEQUENCE -k KMER -o OUTPUT [-t THRESHOLD] <n>\033[0m")
         sys.exit(1)
 
     args = parser.parse_args()
