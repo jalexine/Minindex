@@ -2,11 +2,9 @@ import os
 import sys
 import pickle
 import argparse
-from collections import Counter
+from collections import defaultdict
 from time import time
 from fmi import FmIndex
-
-COMPLEMENTS = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
 
 class Timer:
     """
@@ -27,86 +25,80 @@ class Timer:
             print("Timer error: 'elapsed' attribute not set.")
 
 def reverse_complement(kmer):
-    """Computes the reverse complement of a given k-mer."""
-    return ''.join(COMPLEMENTS[nuc] for nuc in reversed(kmer))
+    """
+    Returns the reverse complement of a k-mer.
+    """
+    complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+    return "".join(complement[base] for base in reversed(kmer))
 
 def canonical_kmer(kmer):
-    """Computes the canonical form of a k-mer."""
-    rkmer = reverse_complement(kmer)
-    return kmer if kmer < rkmer else rkmer
-
-def process_sequence(sequence, counts, k):
-    """Processes a sequence and updates the k-mers in the counter."""
-    for i in range(len(sequence) - k + 1):
-        kmer = canonical_kmer(sequence[i:i + k])
-        counts[kmer] += 1
-
-def kmer_abundance(fasta_file, k):
     """
-    Computes the abundance of all canonical k-mers of size k from a FASTA file.
+    Returns the canonical form of a k-mer (the lexicographically smallest between the k-mer and its reverse complement).
     """
-    counts = Counter()
-    with open(fasta_file, "r") as f:
-        sequence = ""
-        for line in f:
-            if line.startswith(">"):  
-                if sequence:
-                    process_sequence(sequence, counts, k)
-                sequence = ""
-            else:
-                sequence += line.strip().upper()
-        if sequence:
-            process_sequence(sequence, counts, k)
-    return counts
+    rev_comp = reverse_complement(kmer)
+    return min(kmer, rev_comp)
 
-def create_spss(dbg):
+def count_kmers(fasta_file, k):
     """
-    Builds SPSS by maximizing the diversity of explored paths.
+    Counts canonical k-mers in a FASTA file.
     """
-    spss_fragments = []
-    dbg_set = set(dbg.keys())
+    kmer_counts = defaultdict(int)
+    with open(fasta_file, "r") as file:
+        for line in file:
+            if line.startswith(">"):
+                continue  # Skip headers
+            sequence = line.strip().upper()
+            for i in range(len(sequence) - k + 1):
+                kmer = sequence[i:i+k]
+                canonical = canonical_kmer(kmer)
+                kmer_counts[canonical] += 1
+    return kmer_counts
 
-    while dbg_set:
-        kmer = dbg_set.pop()
-        left_part, right_part = [], []
-        current = kmer
+def filter_kmers(kmer_counts, threshold):
+    """
+    Filters k-mers with abundance below a given threshold.
+    """
+    return {kmer: count for kmer, count in kmer_counts.items() if count >= threshold}
 
-        # Right extension
-        while True:
-            neighbors = [
-                current[1:] + c for c in "ACGT" if current[1:] + c in dbg_set
-            ]
-            if neighbors:
-                next_kmer = max(neighbors, key=lambda n: dbg.get(n, 0))  # Most frequent neighbor
-                right_part.append(next_kmer[-1])
-                dbg_set.remove(next_kmer)
-                current = next_kmer
-            else:
-                break
+def build_dbg(kmer_counts):
+    """
+    Builds an implicit de Bruijn graph from the k-mers.
+    """
+    dbg = defaultdict(list)
+    for kmer in kmer_counts:
+        prefix = kmer[:-1]
+        suffix = kmer[1:]
+        dbg[prefix].append(suffix)
+    return dbg
 
-        current = kmer
-        # Left extension
-        while True:
-            neighbors = [
-                c + current[:-1] for c in "ACGT" if c + current[:-1] in dbg_set
-            ]
-            if neighbors:
-                prev_kmer = max(neighbors, key=lambda n: dbg.get(n, 0))  # Most frequent neighbor
-                left_part.append(prev_kmer[0])
-                dbg_set.remove(prev_kmer)
-                current = prev_kmer
-            else:
-                break
+def generate_simplitigs(dbg):
+    """
+    Generates an SPSS using simplitigs from the de Bruijn graph.
+    """
+    visited = set()
+    simplitigs = []
 
-        # Build the unitig
-        unitig = ''.join(reversed(left_part)) + kmer + ''.join(right_part)
-        spss_fragments.append(unitig)
+    for node in dbg:
+        if node not in visited:
+            simplitig = []
+            stack = [node]
 
-    return '%'.join(spss_fragments) + '$'
+            # Extend forward
+            while stack:
+                current = stack.pop()
+                if current not in visited:
+                    simplitig.append(current[-1])
+                    visited.add(current)
+                    if current in dbg and len(dbg[current]) == 1:
+                        stack.append(dbg[current][0])
+
+            simplitigs.append("".join(simplitig))
+
+    return "%".join(simplitigs) + "$"
 
 def save_spss(spss_str, output_path, k, threshold, dataset_name):
     """
-    Saves the SPSS string to a file using pickle with an explicit name.
+    Saves the SPSS string to a file.
     """
     filename = f"spss_{dataset_name}_k{k}_t{threshold}.pkl"
     filepath = os.path.join(output_path, filename)
@@ -116,17 +108,17 @@ def save_spss(spss_str, output_path, k, threshold, dataset_name):
 
 def save_fm_index(fm_index, output_path, k, threshold, dataset_name):
     """
-    Saves the FM-index to a file with a clear and explicit name.
+    Saves the FM-index to a file.
     """
     filename = f"fmi_{dataset_name}_k{k}_t{threshold}.dump"
     filepath = os.path.join(output_path, filename)
     with open(filepath, "wb") as f:
         pickle.dump(fm_index, f)
-    print(f"FM-index saved to {filename}")
+    print(f"FM-index saved to {filepath}")
 
 def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, time_spss, spss_size, num_spss, time_fmi):
     """
-    Saves the statistics to a text file and prints them to the terminal.
+    Saves the statistics to a text file and prints them.
     """
     filename = os.path.join(output_path, f"stats_{os.path.basename(fasta_file)}.txt")
     content = (
@@ -167,32 +159,30 @@ def main():
     parser.add_argument("-k", "--kmer", type=int, required=True, help="K-mer size")
     parser.add_argument("-t", "--threshold", type=int, required=True, help="Threshold size") 
     parser.add_argument("-o", "--output", required=False, default="./output", 
-                    help="Output directory for results (default: './output')")
+                        help="Output directory for results (default: './output')")
 
-    # Custom help message
     if len(sys.argv) == 1:
-        print("\033[95m♡ pls use : sequences_to_indexed_spss.py -i SEQUENCE -k KMER -o OUTPUT [-t THRESHOLD] <n>\033[0m")
+        print("\033[95m♡ pls use : sequences_to_indexed_spss.py -i SEQUENCE -k KMER -o OUTPUT [-t THRESHOLD]\033[0m")
         sys.exit(1)
 
     args = parser.parse_args()
 
-    # Validate input file exists
     if not os.path.isfile(args.sequence):
         print(f"Error: Input sequence file '{args.sequence}' not found.")
         sys.exit(1)
 
-    # Validate output directory
     if not os.path.exists(args.output):
         print(f"Warning: Output directory '{args.output}' does not exist. Creating it.")
         os.makedirs(args.output)
 
-    # Core processing
     with Timer() as timer_select:
-        dbg = kmer_abundance(args.sequence, args.kmer)
-        dbg = {kmer: count for kmer, count in dbg.items() if count >= args.threshold}
+        kmer_counts = count_kmers(args.sequence, args.kmer)
+        kmer_counts = filter_kmers(kmer_counts, args.threshold)
+    
+    dbg = build_dbg(kmer_counts)
 
     with Timer() as timer_spss:
-        spss = create_spss(dbg)
+        spss = generate_simplitigs(dbg)
 
     dataset_name = os.path.basename(args.sequence).split('.')[0]
     save_spss(spss, args.output, args.kmer, args.threshold, dataset_name)
