@@ -26,28 +26,19 @@ class Timer:
             print("Timer error: 'elapsed' attribute not set.")
 
 def reverse_complement(kmer):
-    """
-    Returns the reverse complement of a k-mer.
-    """
     complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
     return "".join(complement[base] for base in reversed(kmer))
 
 def canonical_kmer(kmer):
-    """
-    Returns the canonical form of a k-mer (the lexicographically smallest between the k-mer and its reverse complement).
-    """
     rev_comp = reverse_complement(kmer)
     return min(kmer, rev_comp)
 
 def count_kmers(fasta_file, k):
-    """
-    Counts canonical k-mers in a FASTA file.
-    """
     kmer_counts = defaultdict(int)
     with open(fasta_file, "r") as file:
         for line in file:
             if line.startswith(">"):
-                continue  # Skip headers
+                continue
             sequence = line.strip().upper()
             for i in range(len(sequence) - k + 1):
                 kmer = sequence[i:i+k]
@@ -56,15 +47,9 @@ def count_kmers(fasta_file, k):
     return kmer_counts
 
 def filter_kmers(kmer_counts, threshold):
-    """
-    Filters k-mers with abundance below a given threshold.
-    """
     return {kmer: count for kmer, count in kmer_counts.items() if count >= threshold}
 
 def build_dbg(kmer_counts):
-    """
-    Builds an implicit de Bruijn graph from the k-mers.
-    """
     dbg = defaultdict(list)
     for kmer in kmer_counts:
         prefix = kmer[:-1]
@@ -73,9 +58,6 @@ def build_dbg(kmer_counts):
     return dbg
 
 def generate_simplitigs(dbg):
-    """
-    Generates an SPSS using simplitigs from the de Bruijn graph.
-    """
     visited = set()
     simplitigs = []
 
@@ -84,7 +66,6 @@ def generate_simplitigs(dbg):
             simplitig = []
             stack = [node]
 
-            # Extend forward
             while stack:
                 current = stack.pop()
                 if current not in visited:
@@ -97,24 +78,51 @@ def generate_simplitigs(dbg):
 
     return "%".join(simplitigs) + "$"
 
-def save_fm_index(fm_index, output_path, k, threshold, dataset_name):
+def generate_unitigs(dbg):
     """
-    Saves the FM-index to a file.
+    Generates unitigs from the de Bruijn graph.
     """
-    filename = f"fmi_{dataset_name}_k{k}_t{threshold}.dump"
+    visited = set()
+    unitigs = []
+
+    nodes = list(dbg.keys())
+
+    for node in nodes:
+        if node not in visited:
+            unitig = [node]
+            visited.add(node)
+            next_node = dbg[node][0] if len(dbg[node]) == 1 else None
+
+            while next_node and next_node not in visited and len(dbg[next_node]) == 1:
+                unitig.append(next_node[-1])
+                visited.add(next_node)
+                next_node = dbg[next_node][0]
+
+            unitigs.append("".join(unitig))
+    return "%".join(unitigs) + "$"
+
+
+def save_fm_index(fm_index, output_base, k, threshold, dataset_name, mode):
+    """
+    Saves the FM-index to a file in the correct mode-specific directory.
+    """
+    output_path = output_base
+    os.makedirs(output_path, exist_ok=True)  # Crée uniquement les dossiers nécessaires
+    filename = f"fmi_{dataset_name}_k{k}_t{threshold}_{mode}.dump"
     filepath = os.path.join(output_path, filename)
     with open(filepath, "wb") as f:
         pickle.dump(fm_index, f)
     print(f"FM-index saved to {filepath}")
 
-def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, time_spss, spss_size, num_spss, time_fmi):
+
+def save_statistics_and_print(output_base, fasta_file, k, t, time_selecting, time_spss, spss_size, num_spss, time_fmi, mode):
     """
-    Saves the statistics to a CSV file and prints them to the console.
+    Saves the statistics to a CSV file in the correct mode-specific directory.
     """
-    # Generate the CSV file name
+    output_path = output_base
+    os.makedirs(output_path, exist_ok=True)  # Crée uniquement le bon dossier
     filename = os.path.join(output_path, f"stats_{os.path.basename(fasta_file)}.csv")
     
-    # Prepare the data row
     headers = ["Dataset", "k", "t", "TIME_SELECTING_KMERS", "TIME_SPSS_CONSTRUCTION", "SPSS(K)", "#SPSS(K)", "TIME_BUILD_FMI"]
     data = [
         os.path.basename(fasta_file),
@@ -126,21 +134,17 @@ def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, tim
         num_spss,
         f"{time_fmi:.2f}",
     ]
-    
-    # Check if the file exists to write headers only once
     write_headers = not os.path.isfile(filename)
     
-    # Save data to the CSV file
     with open(filename, mode='a', newline='') as file:
         writer = csv.writer(file)
         if write_headers:
-            writer.writerow(headers)  # Write headers if the file is new
-        writer.writerow(data)  # Write the data row
+            writer.writerow(headers)
+        writer.writerow(data)
 
-    # Print the statistics to the console
     content = (
         f"----------------------------------------\n"
-        f"Processing: -i {fasta_file} -k {k} -t {t}\n"
+        f"Processing: -i {fasta_file} -k {k} -t {t} --mode {mode}\n"
         f"OUT TIME_SELECTING_KMERS={time_selecting:.2f} seconds\n"
         f"OUT TIME_SPSS_CONSTRUCTION={time_spss:.2f} seconds\n"
         f"OUT |SPSS(K)|={spss_size}\n"
@@ -148,14 +152,12 @@ def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, tim
         f"OUT TIME BUILD FMI={time_fmi:.2f} seconds\n"
         f"----------------------------------------\n"
     )
-    
     print(content)
 
+
+
 def test_fm_index(fm_index, spss):
-    """
-    Tests the FM-index by comparing with the raw SPSS string.
-    """
-    test_kmers = ["ACTG", "GGTA", "CCGT"]  # Example kmers for testing
+    test_kmers = ["ACTG", "GGTA", "CCGT"]
     for kmer in test_kmers:
         in_fmi = fm_index.contains(kmer)
         in_raw = kmer in spss
@@ -163,29 +165,19 @@ def test_fm_index(fm_index, spss):
     print("FM-index validation passed.")
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate SPSS from sequencing data and build FM-index.",
-        add_help=False
-    )
+    parser = argparse.ArgumentParser(description="Generate SPSS from sequencing data and build FM-index.")
     parser.add_argument("-i", "--sequence", required=True, help="Sequence file (FASTA)")
     parser.add_argument("-k", "--kmer", type=int, required=True, help="K-mer size")
-    parser.add_argument("-t", "--threshold", type=int, required=True, help="Threshold size") 
-    parser.add_argument("-o", "--output", required=False, default="./output", 
-                        help="Output directory for results (default: './output')")
-
-    if len(sys.argv) == 1:
-        print("\033[95m♡ pls use : sequences_to_indexed_spss.py -i SEQUENCE -k KMER -o OUTPUT [-t THRESHOLD]\033[0m")
-        sys.exit(1)
+    parser.add_argument("-t", "--threshold", type=int, required=True, help="Threshold size")
+    parser.add_argument("-o", "--output", default="./Benchmark", help="Output directory (default: './Benchmark')")
+    parser.add_argument("--mode", default="simplitigs", choices=["simplitigs", "unitigs"],
+                        help="Mode of construction: 'simplitigs' (default) or 'unitigs'")
 
     args = parser.parse_args()
 
     if not os.path.isfile(args.sequence):
         print(f"Error: Input sequence file '{args.sequence}' not found.")
         sys.exit(1)
-
-    if not os.path.exists(args.output):
-        print(f"Warning: Output directory '{args.output}' does not exist. Creating it.")
-        os.makedirs(args.output)
 
     with Timer() as timer_select:
         kmer_counts = count_kmers(args.sequence, args.kmer)
@@ -194,15 +186,17 @@ def main():
     dbg = build_dbg(kmer_counts)
 
     with Timer() as timer_spss:
-        spss = generate_simplitigs(dbg)
+        if args.mode == "unitigs":
+            spss = generate_unitigs(dbg)
+        else:
+            spss = generate_simplitigs(dbg)
 
     dataset_name = os.path.basename(args.sequence).split('.')[0]
 
     with Timer() as timer_build_fmi:
         fm_index = FmIndex(spss)
-    save_fm_index(fm_index, args.output, args.kmer, args.threshold, dataset_name)
+    save_fm_index(fm_index, args.output, args.kmer, args.threshold, dataset_name, args.mode)
 
-    # Validate FM-index
     test_fm_index(fm_index, spss)
 
     save_statistics_and_print(
@@ -215,7 +209,9 @@ def main():
         len(spss),
         spss.count('%'),
         timer_build_fmi.elapsed,
+        args.mode
     )
+
 
 if __name__ == "__main__":
     main()
