@@ -1,0 +1,20 @@
+fasta_files:
+  - "test-data/reads_05x.fasta"
+  - "test-data/reads_30x.fasta"
+  - "test-data/reads_30x_poly.fasta"
+  - "test-data/reads_80x.fasta"
+ks:
+  - 15
+  - 21
+  - 31
+  - 41
+  - 51
+  - 61
+thresholds:
+  - 2
+  - 3
+  - 5
+  - 7
+  - 10
+  - 15
+
