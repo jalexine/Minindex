@@ -119,10 +119,8 @@ def save_statistics_and_print(output_base, fasta_file, k, t, time_selecting, tim
     """
     Saves the statistics to a CSV file in the correct mode-specific directory.
     """
-    output_path = output_base
-    os.makedirs(output_path, exist_ok=True)  # Crée uniquement le bon dossier
-    filename = os.path.join(output_path, f"stats_{os.path.basename(fasta_file)}.csv")
-    
+    parent_directory = os.path.abspath(os.path.join(output_base, os.pardir))
+    filename = os.path.join(parent_directory, f"stats_{os.path.basename(fasta_file)}.csv")
     headers = ["Dataset", "k", "t", "TIME_SELECTING_KMERS", "TIME_SPSS_CONSTRUCTION", "SPSS(K)", "#SPSS(K)", "TIME_BUILD_FMI"]
     data = [
         os.path.basename(fasta_file),
