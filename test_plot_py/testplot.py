@@ -12,19 +12,11 @@ def process_csv(file_path):
     # Load the dataset
     df = pd.read_csv(file_path)
 
-    # Filter data for k=21 and plot SPSS(K) vs t
-    df_k21 = df[df['k'] == 21]
-    plt.figure()
-    plt.plot(df_k21['t'], df_k21['SPSS(K)'], marker='o', label=f"{file_path}")
-    plt.title(f"SPSS(K) vs t for k=21 ({file_path})")
-    plt.xlabel("t (Threshold)")
-    plt.ylabel("SPSS(K)")
-    plt.legend()
-    plt.grid()
-    plot_path = file_path.replace('.csv', '_spss_k21_plot.png')
-    plt.savefig(plot_path)
-    plt.close()
-    print(f"  - Plot saved as: {plot_path}")
+    # Ensure required columns exist
+    required_columns = {'k', 't', 'SPSS(K)', 'TIME_SELECTING_KMERS', 'TIME_SPSS_CONSTRUCTION', 'TIME_BUILD_FMI'}
+    if not required_columns.issubset(df.columns):
+        print(f"Skipping {file_path}: Missing required columns.")
+        return
 
     # Generate a table for running times for different k values
     time_table = df.groupby('k')[['TIME_SELECTING_KMERS', 'TIME_SPSS_CONSTRUCTION', 'TIME_BUILD_FMI']].mean()
@@ -36,6 +28,36 @@ def process_csv(file_path):
     time_table.to_csv(output_file, index=False)
     print(f"  - Running time table saved as: {output_file}")
 
+# Generate a combined plot for a specific k across all datasets
+def combined_plot(csv_files, k, output_name):
+    plt.figure()
+    for file_path in csv_files:
+        # Load the dataset
+        df = pd.read_csv(file_path)
+
+        # Ensure required columns exist
+        if 'k' not in df.columns or 't' not in df.columns or 'SPSS(K)' not in df.columns:
+            print(f"Skipping {file_path}: Missing required columns.")
+            continue
+
+        # Filter data for the specified k
+        df_k = df[df['k'] == k]
+        if df_k.empty:
+            print(f"No data for k={k} in {file_path}")
+            continue
+
+        plt.plot(df_k['t'], df_k['SPSS(K)'], marker='o', label=file_path)
+
+    plt.title(f"SPSS(K) vs t for k={k} (All Datasets)")
+    plt.xlabel("t (Threshold)")
+    plt.ylabel("SPSS(K)")
+    plt.legend()
+    plt.grid()
+    combined_plot_path = output_name
+    plt.savefig(combined_plot_path)
+    plt.close()
+    print(f"Combined plot saved as: {combined_plot_path}")
+
 # Detect and display all CSV files in the current directory
 csv_files = glob.glob("*.csv")
 print("Detected CSV files:", csv_files)
@@ -46,6 +68,10 @@ if not csv_files:
 else:
     for csv_file in csv_files:
         process_csv(csv_file)
+
+    # Generate combined plots for k=21 and k=31
+    combined_plot(csv_files, k=21, output_name="combined_spss_k21_plot.png")
+    combined_plot(csv_files, k=31, output_name="combined_spss_k31_plot.png")
 
 # Test write permissions
 try:
