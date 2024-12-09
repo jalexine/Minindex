@@ -1,8 +1,6 @@
 fasta_files:
   - "test-data/reads_05x.fasta"
-  - "test-data/reads_30x.fasta"
-  - "test-data/reads_30x_poly.fasta"
-  - "test-data/reads_80x.fasta"
+  - "test-data/test.fasta"
 ks:
   - 15
   - 21

@@ -1,0 +1,70 @@
+host: Vivobook_Julie
+Building DAG of jobs...
+Provided cores: 20
+Rules claiming more threads will be scaled down.
+Job stats:
+job          count
+---------  -------
+all              1
+benchmark        2
+total            3
+
+Select jobs to execute...
+Execute 2 jobs...
+
+[Mon Dec  9 19:27:34 2024]
+localrule benchmark:
+    input: test-data/reads_05x.fasta
+    output: Benchmark/results/reads_05x
+    jobid: 1
+    reason: Missing output files: Benchmark/results/reads_05x
+    wildcards: dataset=reads_05x
+    resources: tmpdir=C:\Users\julie\AppData\Local\Temp
+
+
+[Mon Dec  9 19:27:34 2024]
+localrule benchmark:
+    input: test-data/test.fasta
+    output: Benchmark/results/test
+    jobid: 2
+    reason: Missing output files: Benchmark/results/test
+    wildcards: dataset=test
+    resources: tmpdir=C:\Users\julie\AppData\Local\Temp
+
+[Mon Dec  9 19:27:34 2024]
+Error in rule benchmark:
+    jobid: 1
+    input: test-data/reads_05x.fasta
+    output: Benchmark/results/reads_05x
+    shell:
+        
+        mkdir -p Benchmark/results/reads_05x
+        for k in 15 21 31 41 51 61; do
+            for t in 2 3 5 7 10 15; do
+                python src/sequences_to_indexed_spss.py -i test-data/reads_05x.fasta -k $k -t $t -o Benchmark/results/reads_05x
+            done
+        done
+        
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+[Mon Dec  9 19:27:34 2024]
+Error in rule benchmark:
+    jobid: 2
+    input: test-data/test.fasta
+    output: Benchmark/results/test
+    shell:
+        
+        mkdir -p Benchmark/results/test
+        for k in 15 21 31 41 51 61; do
+            for t in 2 3 5 7 10 15; do
+                python src/sequences_to_indexed_spss.py -i test-data/test.fasta -k $k -t $t -o Benchmark/results/test
+            done
+        done
+        
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake\log\2024-12-09T192734.063134.snakemake.log
+WorkflowError:
+At least one job did not complete successfully.

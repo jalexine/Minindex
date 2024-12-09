@@ -1,0 +1,8 @@
+host: Vivobook_Julie
+Building DAG of jobs...
+MissingInputException in rule benchmark in file C:\Users\julie\Documents\DOCUMENTS ETUDES\M2\ALG\projet\Minindex\Snakefile, line 12:
+Missing input files for rule benchmark:
+    output: Benchmark/results/reads_30x
+    wildcards: dataset=reads_30x
+    affected files:
+        test-data/reads_30x.fasta
