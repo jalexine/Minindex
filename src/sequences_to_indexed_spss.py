@@ -2,6 +2,7 @@ import os
 import sys
 import pickle
 import argparse
+import csv
 from collections import defaultdict
 from time import time
 from fmi import FmIndex
@@ -96,16 +97,6 @@ def generate_simplitigs(dbg):
 
     return "%".join(simplitigs) + "$"
 
-def save_spss(spss_str, output_path, k, threshold, dataset_name):
-    """
-    Saves the SPSS string to a file.
-    """
-    filename = f"spss_{dataset_name}_k{k}_t{threshold}.pkl"
-    filepath = os.path.join(output_path, filename)
-    with open(filepath, "wb") as f:
-        pickle.dump(spss_str, f)
-    print(f"SPSS saved to {filepath}")
-
 def save_fm_index(fm_index, output_path, k, threshold, dataset_name):
     """
     Saves the FM-index to a file.
@@ -118,9 +109,35 @@ def save_fm_index(fm_index, output_path, k, threshold, dataset_name):
 
 def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, time_spss, spss_size, num_spss, time_fmi):
     """
-    Saves the statistics to a text file and prints them.
+    Saves the statistics to a CSV file and prints them to the console.
     """
-    filename = os.path.join(output_path, f"stats_{os.path.basename(fasta_file)}.txt")
+    # Generate the CSV file name
+    filename = os.path.join(output_path, f"stats_{os.path.basename(fasta_file)}.csv")
+    
+    # Prepare the data row
+    headers = ["Dataset", "k", "t", "TIME_SELECTING_KMERS", "TIME_SPSS_CONSTRUCTION", "SPSS(K)", "#SPSS(K)", "TIME_BUILD_FMI"]
+    data = [
+        os.path.basename(fasta_file),
+        k,
+        t,
+        f"{time_selecting:.2f}",
+        f"{time_spss:.2f}",
+        spss_size,
+        num_spss,
+        f"{time_fmi:.2f}",
+    ]
+    
+    # Check if the file exists to write headers only once
+    write_headers = not os.path.isfile(filename)
+    
+    # Save data to the CSV file
+    with open(filename, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if write_headers:
+            writer.writerow(headers)  # Write headers if the file is new
+        writer.writerow(data)  # Write the data row
+
+    # Print the statistics to the console
     content = (
         f"----------------------------------------\n"
         f"Processing: -i {fasta_file} -k {k} -t {t}\n"
@@ -132,12 +149,7 @@ def save_statistics_and_print(output_path, fasta_file, k, t, time_selecting, tim
         f"----------------------------------------\n"
     )
     
-    # Print to terminal
     print(content)
-    
-    # Save to file
-    with open(filename, "a") as f:
-        f.write(content)
 
 def test_fm_index(fm_index, spss):
     """
@@ -185,7 +197,6 @@ def main():
         spss = generate_simplitigs(dbg)
 
     dataset_name = os.path.basename(args.sequence).split('.')[0]
-    save_spss(spss, args.output, args.kmer, args.threshold, dataset_name)
 
     with Timer() as timer_build_fmi:
         fm_index = FmIndex(spss)
