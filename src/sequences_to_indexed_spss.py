@@ -154,13 +154,42 @@ def save_statistics_and_print(output_base, fasta_file, k, t, time_selecting, tim
 
 
 
-def test_fm_index(fm_index, spss):
-    test_kmers = ["ACTG", "GGTA", "CCGT"]
-    for kmer in test_kmers:
-        in_fmi = fm_index.contains(kmer)
-        in_raw = kmer in spss
-        assert in_fmi == in_raw, f"FM-index inconsistency for {kmer}"
+def test_fm_index(fm_index, spss, k):
+    """
+    Validate the FM-index by comparing its 'contains' method 
+    with the 'in' operator in Python for the original sequence.
+
+    Args:
+        fm_index (FmIndex): The FM-index object.
+        spss (str): The concatenated SPSS used to build the index.
+        k (int): The k-mer size.
+
+    Returns:
+        bool: True if the FM-index validation passes, False otherwise.
+    """
+    for i in range(len(spss) - k + 1):
+        kmer = spss[i:i + k]
+
+        # Ignore k-mers containing '%'
+        if '%' in kmer:
+            continue
+
+        # Debugging print statements
+        print(f"Checking if k-mer '{kmer}' exists in SPSS directly: {kmer in spss}")
+
+        # Check if kmer is in SPSS using Python 'in' operator
+        in_python = kmer in spss
+        # Check if kmer is in FM-index using 'contains' method
+        in_fm_index = fm_index.contains(kmer)
+
+        if in_python != in_fm_index:
+            print(f"Discrepancy found for k-mer: {kmer}")
+            return False
     print("FM-index validation passed.")
+    return True
+
+
+
 
 def main():
     parser = argparse.ArgumentParser(description="Generate SPSS from sequencing data and build FM-index.")
@@ -168,8 +197,8 @@ def main():
     parser.add_argument("-k", "--kmer", type=int, required=True, help="K-mer size")
     parser.add_argument("-t", "--threshold", type=int, required=True, help="Threshold size")
     parser.add_argument("-o", "--output", default="./Benchmark", help="Output directory (default: './Benchmark')")
-    parser.add_argument("--mode", default="simplitigs", choices=["simplitigs", "unitigs"],
-                        help="Mode of construction: 'simplitigs' (default) or 'unitigs'")
+    parser.add_argument("--mode", default="simplitig", choices=["simplitig", "unitig"],
+                        help="Mode of construction: 'simplitig' (default) or 'unitig'")
 
     args = parser.parse_args()
 
@@ -184,7 +213,7 @@ def main():
     dbg = build_dbg(kmer_counts)
 
     with Timer() as timer_spss:
-        if args.mode == "unitigs":
+        if args.mode == "unitig":
             spss = generate_unitigs(dbg)
         else:
             spss = generate_simplitigs(dbg)
@@ -195,7 +224,15 @@ def main():
         fm_index = FmIndex(spss)
     save_fm_index(fm_index, args.output, args.kmer, args.threshold, dataset_name, args.mode)
 
-    test_fm_index(fm_index, spss)
+ # Validation du FM-index
+    print("Validating FM-index...")
+    validation_passed = test_fm_index(fm_index, spss, args.kmer)
+    if not validation_passed:
+        print("FM-index validation failed. Check the implementation!")
+        sys.exit(1)
+    else:
+        print("FM-index validation passed successfully!")
+
 
     save_statistics_and_print(
         args.output,
